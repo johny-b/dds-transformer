@@ -117,46 +117,45 @@ model = SimpleModel().to(device)
 #   higher batch size (4096) -> slower learning
 batch_size = 1024
 
-#   this got us ~ 97.5% test accuracy, but was still improving
+#   300 epochs got us ~ 97.5% test accuracy, but was still improving
 epochs = 300
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(testset, batch_size=batch_size)
-
 
 optimizer = t.optim.Adam(model.parameters())
 train_loss_list = []
 train_accuracy = []
 test_loss_list = []
 test_accuracy = []
+
+def get_loss_and_acc(model, inputs, labels):
+    inputs = inputs.to(device)
+    labels = labels.to(device)
+    
+    preds = model(inputs)
+        
+    loss = F.mse_loss(preds, labels)
+    round_preds = preds.round()
+    acc = (round_preds == labels).all(dim=1).mean(dtype=t.float32).item()
+    
+    return loss, acc
+    
 	
 for epoch in tqdm(range(epochs)):
     for inputs, labels in train_loader:
-        inputs = inputs.to(device)
-        labels = labels.to(device)
+        loss, acc = get_loss_and_acc(model, inputs, labels)
+        train_loss_list.append(loss.item())
+        train_accuracy.append(acc)
         
-        pred = model(inputs)
-        loss = F.mse_loss(pred, labels)
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-        train_loss_list.append(loss.item())
-        
-        round_pred = pred.round()
-        acc = (round_pred == labels).all(dim=1).mean(dtype=t.float32)
-        train_accuracy.append(acc.item())
-        
+
     test_inputs, test_labels = next(iter(test_loader))
-    test_inputs = test_inputs.to(device)
-    test_labels = test_labels.to(device)
-    test_pred = model(test_inputs)
-    
-    test_loss = F.mse_loss(test_pred, test_labels)
+    test_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels)
     test_loss_list.append(test_loss.item())
-    
-    round_test_pred = test_pred.round()
-    test_acc = (round_test_pred == test_labels).all(dim=1).mean(dtype=t.float32)
-    test_accuracy.append(test_acc.item())
+    test_accuracy.append(test_acc)
     
     
 
@@ -173,10 +172,6 @@ plt.plot(list(range(len(test_loss_list))), test_loss_list)
 plt.show()
 
 plt.plot(list(range(len(test_accuracy))), test_accuracy)
-plt.show()
-
-# %%
-plt.plot(list(range(len(test_loss_list[250:]))), test_loss_list[250:])
 plt.show()
 
 # %%
