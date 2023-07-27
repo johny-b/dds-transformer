@@ -114,7 +114,10 @@ testset = Dataset2card([81])
 # %%
 model = SimpleModel().to(device)
 	
+#   higher batch size (4096) -> slower learning
 batch_size = 1024
+
+#   this got us ~ 97.5% test accuracy, but was still improving
 epochs = 300
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
@@ -172,5 +175,8 @@ plt.show()
 plt.plot(list(range(len(test_accuracy))), test_accuracy)
 plt.show()
 
+# %%
+plt.plot(list(range(len(test_loss_list[250:]))), test_loss_list[250:])
+plt.show()
 
 # %%
