@@ -10,14 +10,22 @@ device = "cuda"
 
 
 # %%
-class Dataset2card(Dataset):
-    def __init__(self, file_ids: list[int]):
+class SingleCardDataset(Dataset):
+    def __init__(self, num_cards: int, file_ids: list[int]):
+        self.num_cards = num_cards
         self.file_ids = file_ids
+        
+        print("Reading input files")
         self.pbn_data = self._get_pbn_data()
         
+        print("Processing boards")
         self.data = []
         for in_pbn, out_pbn in tqdm(self.pbn_data):
-            self.data.append((self._parse_pbn(in_pbn), self._parse_pbn(out_pbn)))
+            in_ = self._parse_pbn(in_pbn)
+            out = self._parse_pbn(out_pbn)
+            assert in_.sum().item() == self.num_cards * 4
+            assert out.sum().item() == self.num_cards * 4 - 1
+            self.data.append((in_, out))
         
     def __len__(self):
         return len(self.data)
@@ -28,7 +36,7 @@ class Dataset2card(Dataset):
     def _get_pbn_data(self):
         data = []
         for file_ix in tqdm(self.file_ids):
-            fname = f"data/boards_2_card/{file_ix}.csv"
+            fname = f"data/boards_{self.num_cards}_card/{file_ix}.csv"
             data += self._get_file_data(fname)
         return data
     
@@ -89,8 +97,9 @@ class Dataset2card(Dataset):
 
 # %%
 class SimpleModel(nn.Module):
-    def __init__(self):
+    def __init__(self, num_cards: int):
         super().__init__()
+        self.num_cards = num_cards
         self.model = nn.Sequential(
             nn.Linear(208, 208 * 8),
             nn.ReLU(),
@@ -102,23 +111,26 @@ class SimpleModel(nn.Module):
         
     def forward(self, x):
         x = self.model(x)
-        #   model does a softmax, so sum is 1, and we know sum should be 7
-        x = x * 7
+        #   Model does a softmax, so sum is 1, here we force the expected sum
+        #   (i.e. the number of cards that is left)
+        x = x * (self.num_cards * 4 - 1)
         return x
 
 # %%
 
-trainset = Dataset2card([0,1,2,3,4,5,6,7,8,9])
-testset = Dataset2card([81])
+NUM_CARDS = 2
+
+trainset = SingleCardDataset(NUM_CARDS, list(range(20)))
+testset = SingleCardDataset(NUM_CARDS, [81])
 
 # %%
-model = SimpleModel().to(device)
+model = SimpleModel(NUM_CARDS).to(device)
 	
 #   higher batch size (4096) -> slower learning
 batch_size = 1024
 
 #   300 epochs got us ~ 97.5% test accuracy, but was still improving
-epochs = 300
+epochs = 500
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(testset, batch_size=batch_size)
@@ -174,4 +186,7 @@ plt.show()
 plt.plot(list(range(len(test_accuracy))), test_accuracy)
 plt.show()
 
+# %%
+
+t.save(model.state_dict(), f"model_{NUM_CARDS}_{epochs}_{len(trainset.file_ids)}.pth")
 # %%
