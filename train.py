@@ -6,6 +6,9 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
+from models import SimpleModel
+from utils import pbn_to_repr
+
 device = "cuda"
 
 
@@ -21,8 +24,8 @@ class SingleCardDataset(Dataset):
         print("Processing boards")
         self.data = []
         for in_pbn, out_pbn in tqdm(self.pbn_data):
-            in_ = self._parse_pbn(in_pbn)
-            out = self._parse_pbn(out_pbn)
+            in_ = pbn_to_repr(in_pbn)
+            out = pbn_to_repr(out_pbn)
             assert in_.sum().item() == self.num_cards * 4
             assert out.sum().item() == self.num_cards * 4 - 1
             self.data.append((in_, out))
@@ -78,50 +81,18 @@ class SingleCardDataset(Dataset):
         
         new_pbn = " ".join(new_hands)
         assert len(new_pbn) + 1 == len(pbn), f"{pbn} + {card} -> {new_pbn}" 
-        return "N:" + new_pbn
-    
-    def _parse_pbn(self, pbn):
-        #   Return bool tensor of length 204
-        hands = pbn[2:].split(' ')
-        return t.cat([self._parse_pbn_hand(hand) for hand in hands])
-    
-    def _parse_pbn_hand(self, hand):
-        suits = hand.split('.')
-        return t.cat([self._parse_pbn_suit(suit) for suit in suits])
-    
-    def _parse_pbn_suit(self, suit):
-        cards = list(str(x) for x in range(2, 10)) + list('TJQKA')
-        cards.reverse()
-        has_card = [card in suit for card in cards]
-        return t.tensor(has_card, dtype=t.float32)
-
-# %%
-class SimpleModel(nn.Module):
-    def __init__(self, num_cards: int):
-        super().__init__()
-        self.num_cards = num_cards
-        self.model = nn.Sequential(
-            nn.Linear(208, 208 * 8),
-            nn.ReLU(),
-            nn.Linear(208 * 8, 208 * 8),
-            nn.ReLU(),
-            nn.Linear(208 * 8, 208),
-            nn.Softmax(dim=1),
-        )
         
-    def forward(self, x):
-        x = self.model(x)
-        #   Model does a softmax, so sum is 1, here we force the expected sum
-        #   (i.e. the number of cards that is left)
-        x = x * (self.num_cards * 4 - 1)
-        return x
+        #   "N:" prefix
+        if pbn[1] == ':':
+            new_pbn = pbn[:2] + new_pbn
+
+        return new_pbn
 
 # %%
-
 NUM_CARDS = 2
 
-trainset = SingleCardDataset(NUM_CARDS, list(range(20)))
-testset = SingleCardDataset(NUM_CARDS, [81])
+trainset = SingleCardDataset(NUM_CARDS, list(range(10)))
+testset = SingleCardDataset(NUM_CARDS, [82])
 
 # %%
 model = SimpleModel(NUM_CARDS).to(device)
@@ -130,12 +101,12 @@ model = SimpleModel(NUM_CARDS).to(device)
 batch_size = 1024
 
 #   300 epochs got us ~ 97.5% test accuracy, but was still improving
-epochs = 500
+epochs = 10
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(testset, batch_size=batch_size)
 
-optimizer = t.optim.Adam(model.parameters())
+optimizer = t.optim.AdamW(model.parameters())
 train_loss_list = []
 train_accuracy = []
 test_loss_list = []
