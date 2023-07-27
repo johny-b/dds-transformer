@@ -1,4 +1,10 @@
 # %%
+from IPython import get_ipython
+ipython = get_ipython()
+if ipython is not None:
+    ipython.run_line_magic("load_ext", "autoreload")
+    ipython.run_line_magic("autoreload", "2")
+
 from tqdm import tqdm
 
 import torch as t
@@ -91,22 +97,22 @@ class SingleCardDataset(Dataset):
 # %%
 NUM_CARDS = 2
 
-trainset = SingleCardDataset(NUM_CARDS, list(range(10)))
-testset = SingleCardDataset(NUM_CARDS, [82])
+trainset = SingleCardDataset(NUM_CARDS, list(range(99)))
+testset = SingleCardDataset(NUM_CARDS, [99])
 
 # %%
-model = SimpleModel(NUM_CARDS).to(device)
+model = SimpleModel().to(device)
 	
 #   higher batch size (4096) -> slower learning
-batch_size = 1024
+batch_size = 256
 
-#   300 epochs got us ~ 97.5% test accuracy, but was still improving
+#   300 epochs on 100 000 training got us ~ 97.5% test accuracy, but was still improving
 epochs = 10
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(testset, batch_size=batch_size)
+test_loader = DataLoader(testset, batch_size=8192)
 
-optimizer = t.optim.AdamW(model.parameters())
+optimizer = t.optim.AdamW(model.parameters(), weight_decay=0.1)
 train_loss_list = []
 train_accuracy = []
 test_loss_list = []
@@ -160,4 +166,8 @@ plt.show()
 # %%
 
 t.save(model.state_dict(), f"model_{NUM_CARDS}_{epochs}_{len(trainset.file_ids)}.pth")
+# %%
+for ix, acc in enumerate(test_accuracy):
+    print(ix, acc)
+
 # %%
