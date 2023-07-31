@@ -1,26 +1,25 @@
 # %%
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset as TorchDataset
 from tqdm import tqdm
 
 from utils import pbn_to_repr
 
 # %%
-class SingleSizeDataset(Dataset):
-    def __init__(self, num_cards: int, file_ids: list[int]):
-        self.num_cards = num_cards
-        self.file_ids = file_ids
-        
+class Dataset(TorchDataset):
+    def __init__(self, card_files):
+        self.card_files = card_files
         print("Reading input files")
         self.pbn_data = self._get_pbn_data()
-        
         print("Processing boards")
-        self.data = []
+        self.data = self._process_boards()
+        
+    def _process_boards(self):
+        data = []
         for in_pbn, out_pbn in tqdm(self.pbn_data):
             in_ = pbn_to_repr(in_pbn)
             out = pbn_to_repr(out_pbn)
-            assert in_.sum().item() == self.num_cards * 4
-            assert out.sum().item() == self.num_cards * 4 - 1
-            self.data.append((in_, out))
+            data.append((in_, out))
+        return data
         
     def __len__(self):
         return len(self.data)
@@ -30,9 +29,10 @@ class SingleSizeDataset(Dataset):
     
     def _get_pbn_data(self):
         data = []
-        for file_ix in tqdm(self.file_ids):
-            fname = f"data/boards_{self.num_cards}_card/{file_ix}.csv"
-            data += self._get_file_data(fname)
+        for num_cards, file_ids in self.card_files.items():
+            for file_ix in file_ids:
+                fname = f"data/boards_{num_cards}_card/{file_ix}.csv"
+                data += self._get_file_data(fname)
         return data
     
     def _get_file_data(self, fname):
@@ -79,4 +79,3 @@ class SingleSizeDataset(Dataset):
             new_pbn = pbn[:2] + new_pbn
 
         return new_pbn
-# %%

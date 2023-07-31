@@ -6,36 +6,37 @@ if ipython is not None:
     ipython.run_line_magic("autoreload", "2")
 
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 import torch as t
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from models import SimpleModel
-from datasets import SingleSizeDataset
+from datasets import Dataset
 
 device = "cuda"
-
+writer = SummaryWriter('runs')
 
 # %%
-NUM_CARDS = 2
 
-trainset = SingleSizeDataset(NUM_CARDS, list(range(5)))
-testset = SingleSizeDataset(NUM_CARDS, [299])
+trainset = Dataset({
+    2: list(range(10)),
+})
+testset = Dataset({
+    2: [99],
+})
 
 # %%
 model = SimpleModel().to(device)
-	
-#   higher batch size (4096) -> slower learning
-batch_size = 256
 
-#   300 epochs on 100 000 training got us ~ 97.5% test accuracy, but was still improving
+batch_size = 256
 epochs = 10
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(testset, batch_size=8192)
+test_loader = DataLoader(testset, batch_size=10000, shuffle=True)
 
-optimizer = t.optim.AdamW(model.parameters(), weight_decay=0.1)
+optimizer = t.optim.AdamW(model.parameters(), weight_decay=0.02, lr=0.0002)
 train_loss_list = []
 train_accuracy = []
 test_loss_list = []
@@ -54,7 +55,7 @@ def get_loss_and_acc(model, inputs, labels):
     return loss, acc
     
 	
-for epoch in tqdm(range(epochs)):
+for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
     for inputs, labels in train_loader:
         loss, acc = get_loss_and_acc(model, inputs, labels)
         train_loss_list.append(loss.item())
@@ -68,6 +69,19 @@ for epoch in tqdm(range(epochs)):
     test_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels)
     test_loss_list.append(test_loss.item())
     test_accuracy.append(test_acc)
+    
+    writer.add_scalars(
+        'loss', 
+        {'train': train_loss_list[-1], 
+         'test': test_loss_list[-1],}, 
+        epoch_ix,
+    )
+    writer.add_scalars(
+        'accuracy', 
+        {'train': train_accuracy[-1], 
+         'test': test_accuracy[-1],}, 
+        epoch_ix,
+    )
     
     
 
@@ -85,12 +99,5 @@ plt.show()
 
 plt.plot(list(range(len(test_accuracy))), test_accuracy)
 plt.show()
-
-# %%
-
-t.save(model.state_dict(), f"model_{NUM_CARDS}_{epochs}_{len(trainset.file_ids)}.pth")
-# %%
-for ix, acc in enumerate(test_accuracy):
-    print(ix, acc)
 
 # %%
