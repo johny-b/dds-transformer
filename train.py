@@ -40,18 +40,18 @@ trainset_small = Dataset(
 )
 # %%
 model = TransformerModel(
-    d_model=128,
-    nhead=2,
+    d_model=64,
+    nhead=8,
     num_layers=2,
 ).to(device)
 
-batch_size = 128
+batch_size = 4096
 epochs = 100
 
-train_loader = DataLoader(trainset_small, batch_size=batch_size, shuffle=True)
+train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(testset, batch_size=1000, shuffle=True)
 
-optimizer = t.optim.AdamW(model.parameters(), weight_decay=0.1)
+optimizer = t.optim.Adam(model.parameters(), lr=0.002)
 train_loss_list = []
 train_accuracy = []
 test_loss_list = []
