@@ -1,4 +1,5 @@
 # %%
+import torch as t
 from torch import nn
 
 # %%
@@ -9,16 +10,61 @@ class SimpleModel(nn.Module):
             nn.Linear(208, 208 * 8),
             nn.ReLU(),
             nn.Linear(208 * 8, 208 * 8),
+            nn.Dropout(p=0.9),
             nn.ReLU(),
             nn.Linear(208 * 8, 208),
-            nn.Softmax(dim=1),
+            nn.Softmax(dim=1)
         )
 
     def forward(self, x):
-        x_sum = x.sum(dim=1).unsqueeze(1)
-        x = self.model(x)
-        #   Model does a softmax, so sum is 1, here we force the expected sum
-        #   (i.e. the number of cards that is left)
-        x = x * (x_sum - 1)
+        return x - self.model(x)
+        
+# %%
+class TransformerModel(nn.Module):
+    def __init__(self, *, d_model, nhead, num_layers):
+        super().__init__()
+        
+        self.d_model = d_model
+        self.nhead = nhead
+        self.num_layers = num_layers
+        
+        self.embed = nn.Linear(52, d_model)
+
+        self.pos_embed = nn.Parameter(t.empty(4 * d_model))
+        nn.init.normal_(self.pos_embed, std=0.02)
+
+        self.enc = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead),
+            num_layers=num_layers,
+        )
+        self.unembed = nn.Linear(4 * d_model, 208)
+        self.softmax = nn.Softmax(dim=1)
+    
+    def forward(self, x: t.Tensor):
+        assert len(x.shape) == 2
+        assert x.shape[1] == 208
+        
+        x = x.reshape((x.shape[0], 4, 52))
+
+        x = t.stack((
+            self.embed(x[:,0,:]),
+            self.embed(x[:,1,:]),
+            self.embed(x[:,2,:]),
+            self.embed(x[:,3,:]),
+        )).permute((1,0,2))
+        
+        pos_embed = self.pos_embed.reshape((4, self.d_model)).unsqueeze(0)
+        x = x + pos_embed
+        
+        x = self.enc(x)
+        x = x.flatten(start_dim=1)
+        x = self.unembed(x)
+        x = self.softmax(x)
+        
+        # x = x * expected_num_cards
+
         return x
+        
+
+        
 # %%
