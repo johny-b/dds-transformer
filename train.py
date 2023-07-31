@@ -22,36 +22,36 @@ writer = SummaryWriter('runs')
 
 trainset = Dataset(
     {
-        5: list(range(99)),
+        5: list(range(299)),
     },
 )
 testset = Dataset(
     {
-        5: [99],
+        5: [299],
     },
 )
 
-# %%
+# # %%
 
-trainset_small = Dataset(
-    {
-        5: list(range(10)),
-    },
-)
+# trainset_small = Dataset(
+#     {
+#         5: list(range(10)),
+#     },
+# )
 # %%
 model = TransformerModel(
-    d_model=64,
+    d_model=256,
     nhead=8,
-    num_layers=2,
+    num_layers=4,
 ).to(device)
 
-batch_size = 4096
+batch_size = 8192
 epochs = 100
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(testset, batch_size=1000, shuffle=True)
 
-optimizer = t.optim.Adam(model.parameters(), lr=0.002)
+optimizer = t.optim.Adam(model.parameters(), lr=0.001)
 train_loss_list = []
 train_accuracy = []
 test_loss_list = []
@@ -102,21 +102,6 @@ for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
     )
     
 # %%
-t.save(model.state_dict(), "transformer.pth")
-
-# %%
-
-from matplotlib import pyplot as plt
-plt.plot(list(range(len(train_loss_list))), train_loss_list)
-plt.show()
-
-plt.plot(list(range(len(train_accuracy))), train_accuracy)
-plt.show()
-
-plt.plot(list(range(len(test_loss_list))), test_loss_list)
-plt.show()
-
-plt.plot(list(range(len(test_accuracy))), test_accuracy)
-plt.show()
+t.save(model.state_dict(), "transformer_5c_100e_300f.pth")
 
 # %%
