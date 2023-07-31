@@ -22,66 +22,36 @@ writer = SummaryWriter('runs')
 
 trainset = Dataset(
     {
-        2: list(range(10)),
+        5: list(range(99)),
     },
 )
 testset = Dataset(
     {
-        2: [99],
+        5: [99],
     },
 )
 
 # %%
-from torch import nn
-  
 
-class TransformerModel(nn.Module):
-    def __init__(self, d_model=24, nhead=12):
-        super().__init__()
-        self.embed = nn.Linear(52, d_model)
-        self.enc_1 = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead)
-        self.enc_2 = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead)
-        self.enc_3 = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead)
-        self.enc_4 = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead)
-        self.unembed = nn.Linear(4 * d_model, 208)
-        self.softmax = nn.Softmax(dim=1)
-    
-    def forward(self, x: t.Tensor):
-        assert len(x.shape) == 2
-        assert x.shape[1] == 208
-        
-        x = x.reshape((x.shape[0], 4, 52))
-
-        num_cards = x.flatten(start_dim=1).sum(dim=1)
-        expected_num_cards = (num_cards - 1).unsqueeze(1)
-        
-        x = t.stack((
-            self.embed(x[:,0,:]),
-            self.embed(x[:,1,:]),
-            self.embed(x[:,2,:]),
-            self.embed(x[:,3,:]),
-        )).permute((1,0,2))
-        
-        x = self.enc_1(x)
-        x = self.enc_2(x)
-        x = self.enc_3(x)
-        x = self.enc_4(x)
-        x = x.flatten(start_dim=1)
-        x = self.unembed(x)
-        x = self.softmax(x)
-        x = x * expected_num_cards
-
-        return x
-        
-model = TransformerModel().to(device)
+trainset_small = Dataset(
+    {
+        5: list(range(10)),
+    },
+)
+# %%
+model = TransformerModel(
+    d_model=128,
+    nhead=2,
+    num_layers=2,
+).to(device)
 
 batch_size = 128
 epochs = 100
 
-train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True)
+train_loader = DataLoader(trainset_small, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(testset, batch_size=1000, shuffle=True)
 
-optimizer = t.optim.AdamW(model.parameters(), weight_decay=0.02, lr=0.0002)
+optimizer = t.optim.AdamW(model.parameters(), weight_decay=0.1)
 train_loss_list = []
 train_accuracy = []
 test_loss_list = []
@@ -89,7 +59,7 @@ test_accuracy = []
 
 def get_loss_and_acc(model, inputs, labels):
     inputs = inputs.to(device)
-    labels = labels.to(device)
+    labels = labels[:, :52].to(device)
     
     preds = model(inputs)
         
@@ -101,6 +71,8 @@ def get_loss_and_acc(model, inputs, labels):
     
 	
 for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
+    model.train()
+    
     for i, (inputs, labels) in enumerate(train_loader):
         loss, acc = get_loss_and_acc(model, inputs, labels)
         train_loss_list.append(loss.item())
@@ -110,6 +82,7 @@ for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
         optimizer.step()
         optimizer.zero_grad()
 
+    model.eval()
     test_inputs, test_labels = next(iter(test_loader))
     test_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels)
     test_loss_list.append(test_loss.item())

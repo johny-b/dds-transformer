@@ -34,15 +34,16 @@ class TransformerModel(nn.Module):
         nn.init.normal_(self.pos_embed, std=0.02)
 
         self.enc = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead),
+            nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True),
             num_layers=num_layers,
         )
-        self.unembed = nn.Linear(4 * d_model, 208)
+        self.unembed = nn.Linear(4 * d_model, 52)
         self.softmax = nn.Softmax(dim=1)
     
     def forward(self, x: t.Tensor):
         assert len(x.shape) == 2
         assert x.shape[1] == 208
+        in_hand = x[:,:52]
         
         x = x.reshape((x.shape[0], 4, 52))
 
@@ -60,10 +61,8 @@ class TransformerModel(nn.Module):
         x = x.flatten(start_dim=1)
         x = self.unembed(x)
         x = self.softmax(x)
-        
-        # x = x * expected_num_cards
 
-        return x
+        return in_hand - x
         
 
         
