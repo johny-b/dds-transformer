@@ -1,6 +1,8 @@
 # %%
 import torch as t
 
+SUITS = "♠♥♦♣"
+
 # %%
 def pbn_to_repr(pbn):    
     #   Returns bool tensor of length 204
@@ -20,6 +22,7 @@ def parse_pbn_suit(suit):
     cards.reverse()
     has_card = [card in suit for card in cards]
     return t.tensor(has_card, dtype=t.float32)
+
 # %%
 def repr_to_pbn(full_repr):
     hands = [
@@ -44,10 +47,32 @@ def suit_repr_to_pbn(suit_repr):
     cards.reverse()
     suit = [cards[x] for x in range(13) if suit_repr[x]]
     return "".join(suit)
+
+# %%
+def card_in_trick_repr(card):
+    if card == 'X':
+        return t.zeros(52)
+    suit, height = card
+    suits = ['', '', '', '']
+    suits[SUITS.index(suit)] = height
+    return parse_pbn_hand(".".join(suits))
+
+def trick_to_repr(trick_str):
+    cards = ['X', 'X', 'X']
+    if trick_str:
+        trick_cards = trick_str.split(' ')
+        if len(trick_cards) == 1:
+            cards[0] = trick_cards[0]
+        elif len(trick_cards) == 2:
+            cards[0] = trick_cards[1]
+            cards[1] = trick_cards[0]
+        elif len(trick_cards) == 2:
+            cards[0] = trick_cards[2]
+            cards[1] = trick_cards[1]
+            cards[2] = trick_cards[0]
+    return t.cat([card_in_trick_repr(card) for card in cards])
+    
 # %%
 
-pbn = 'A3.A.. KQ... JT... 98...'
-in_ = pbn_to_repr(pbn)
-assert repr_to_pbn(in_) == pbn
-
+# print(trick_to_repr(SUITS[0] + 'A' + ' ' + SUITS[1] + 'A'))
 # %%
