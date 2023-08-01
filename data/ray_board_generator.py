@@ -4,14 +4,14 @@ import ray
 from generate_ending_board import get_deal_data
 
 FILE_BOARDS = 10000
-NUM_FILES = 100
-NUM_CARDS = 2
+NUM_FILES = 300
+NUM_CARDS = 5
 
 # %%
 @ray.remote
 def get_board():
-    data = get_deal_data(NUM_CARDS, "NT", "N")
-    data[4] = str(data[4])
+    data = get_deal_data(NUM_CARDS, "NT")
+    data = [str(x) for x in data]
     return ";".join(data)
 
 # %%
@@ -22,9 +22,10 @@ while result_ids:
     done_ids, result_ids = ray.wait(result_ids, num_returns=FILE_BOARDS)
     data = ray.get(done_ids)
     data = "\n".join(data)
-    fname = f'boards_{NUM_CARDS}_card/{file_ix}.csv'
+    fname = f'boards_{NUM_CARDS}_card_wt/{file_ix}.csv'
     with open(fname, 'w') as f:
         f.write(data)
+    print(fname)
     file_ix += 1
-    
+
 # %%
