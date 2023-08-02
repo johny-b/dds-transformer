@@ -61,7 +61,11 @@ class TransformerModel(nn.Module):
         pos_embed = self.pos_embed.reshape((4, self.d_model)).unsqueeze(0)
         board = board + pos_embed
         
-        trick = t.stack([self.trick_embed(x) for x in trick])
+        trick = t.stack((
+            self.trick_embed(trick[:,0,:]),
+            self.trick_embed(trick[:,1,:]),
+            self.trick_embed(trick[:,2,:]),
+        )).permute((1,0,2))
         trick_pos_embed = self.trick_pos_embed.reshape((3, self.d_model)).unsqueeze(0)
         trick = trick + trick_pos_embed
         
@@ -72,7 +76,3 @@ class TransformerModel(nn.Module):
         x = self.softmax(x)
 
         return in_hand - x
-        
-
-        
-# %%

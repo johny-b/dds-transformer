@@ -66,7 +66,7 @@ def trick_to_repr(trick_str):
         elif len(trick_cards) == 2:
             cards[0] = trick_cards[1]
             cards[1] = trick_cards[0]
-        elif len(trick_cards) == 2:
+        elif len(trick_cards) == 3:
             cards[0] = trick_cards[2]
             cards[1] = trick_cards[1]
             cards[2] = trick_cards[0]
