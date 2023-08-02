@@ -8,7 +8,7 @@ from random import shuffle, choice
 
 from endplay.dealer import generate_deal
 from endplay.dds import solve_board
-from endplay.types import Deal, Denom, Player, Rank
+from endplay.types import Deal, Denom, Player, Rank, Card
 
 
 
@@ -39,7 +39,13 @@ def generate_any_deal(player_cards_cnt):
 
 def play_random_card(deal: Deal):
     hand = deal.curhand
-    cards = list(iter(hand))
+    cards = []
+    if deal.curtrick:
+        suit = deal.curtrick[0].suit
+        cards = [Card(suit=suit, rank=rank) for rank in hand[suit]]
+
+    if not cards:
+        cards = list(iter(hand))
     random_card = choice(cards)
     deal.play(random_card)
 
@@ -70,8 +76,8 @@ def get_deal_data(player_cards_cnt: int, suit: str):
         out.append(str(tricks[0]))
         if tricks[0]:
             return out
-        
+
 # %%
 
-get_deal_data(5, 'nt')
+# print(get_deal_data(6, 'nt'))
 # %%
