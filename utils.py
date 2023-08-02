@@ -24,6 +24,23 @@ def parse_pbn_suit(suit):
     return t.tensor(has_card, dtype=t.float32)
 
 # %%
+def correct_cards_to_repr(correct_cards):
+    ALL_CARDS = list(str(x) for x in range(2, 10)) + list('TJQKA')
+    ALL_CARDS.reverse()
+    
+    cards = correct_cards.split(' ')
+    suit_reprs = []
+    for suit in SUITS:
+        suit_repr = t.zeros(13)
+        suit_cards = [card[1] for card in cards if card[0] == suit]
+        for height in suit_cards:
+            suit_repr[ALL_CARDS.index(height)] = 1
+        suit_reprs.append(suit_repr)
+    return t.cat(suit_reprs)
+
+print(correct_cards_to_repr(SUITS[0] + 'A ' + SUITS[3] + '2'))    
+
+# %%
 def repr_to_pbn(full_repr):
     hands = [
         hand_repr_to_pbn(full_repr[:52]),

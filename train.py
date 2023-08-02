@@ -22,19 +22,13 @@ writer = SummaryWriter('runs')
 
 trainset = Dataset(
     {
-        2: list(range(20)),
-        3: list(range(20)),
-        4: list(range(20)),
         5: list(range(20)),
     },
 )
 
 testset = Dataset(
     {
-        2: [99],
-        3: [99],
-        4: [99],
-        5: [99],
+        5: [299],
     },
 )
 
@@ -45,13 +39,13 @@ model = TransformerModel(
     num_layers=4,
 ).to(device)
 
-batch_size = 4096
+batch_size = 1024
 epochs = 100
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(testset, batch_size=1000, shuffle=True)
 
-optimizer = t.optim.Adam(model.parameters())
+optimizer = t.optim.Adam(model.parameters(), lr=0.0001)
 train_loss_list = []
 train_accuracy = []
 test_loss_list = []
@@ -112,7 +106,7 @@ for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
     )
     
 # %%
-t.save(model.state_dict(), "transformer_5c_wt.pth")
+t.save(model.state_dict(), "transformer_2345c_wt.pth")
 
 # %%
 model.eval()

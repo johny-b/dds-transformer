@@ -3,7 +3,7 @@ import torch as t
 from torch.utils.data import Dataset as TorchDataset
 from tqdm import tqdm
 
-from utils import pbn_to_repr, trick_to_repr
+from utils import pbn_to_repr, trick_to_repr, correct_cards_to_repr
 
 # %%
 class Dataset(TorchDataset):
@@ -16,10 +16,10 @@ class Dataset(TorchDataset):
         
     def _process_boards(self):
         data = []
-        for in_pbn, out_pbn, current_trick, _ in tqdm(self.pbn_data):
-            in_ = pbn_to_repr(in_pbn)
-            out = pbn_to_repr(out_pbn)
+        for pbn, current_trick, correct_cards, _ in tqdm(self.pbn_data):
+            in_ = pbn_to_repr(pbn)
             trick_data = trick_to_repr(current_trick)
+            out = correct_cards_to_repr(correct_cards)
             in_ = t.cat([in_, trick_data])
             data.append((in_, out))
         return data
@@ -34,7 +34,7 @@ class Dataset(TorchDataset):
         data = []
         for num_cards, file_ids in self.card_files.items():
             for file_ix in file_ids:
-                fname = f"data/boards_{num_cards}_card_wt/{file_ix}.csv"
+                fname = f"data/boards_{num_cards}_card_wt_all/{file_ix}.csv"
                 data += self._get_file_data(fname)
         return data
     
@@ -47,11 +47,9 @@ class Dataset(TorchDataset):
     
     def _parse_row(self, row):
         parts = row.split(';')
-        pbn, current_trick, card, tricks = parts[2], parts[3], parts[4], parts[5]
+        pbn, current_trick, correct_cards, tricks = parts[2], parts[3], parts[4], parts[5]
         
-        out_pbn = self._remove_card(pbn, card)
-        
-        return pbn, out_pbn, current_trick, (card, tricks)
+        return pbn, current_trick, correct_cards, tricks
     
     def _remove_card(self, pbn, card):
         def this_card(suit: int, val: str, card: str) -> bool:
