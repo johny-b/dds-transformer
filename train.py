@@ -22,22 +22,22 @@ writer = SummaryWriter('runs')
 
 trainset = Dataset(
     {
-        5: list(range(299)),
+        2: list(range(20)),
+        3: list(range(20)),
+        4: list(range(20)),
+        5: list(range(20)),
     },
 )
+
 testset = Dataset(
     {
-        5: [299],
+        2: [99],
+        3: [99],
+        4: [99],
+        5: [99],
     },
 )
 
-# # %%
-
-# trainset_small = Dataset(
-#     {
-#         5: list(range(10)),
-#     },
-# )
 # %%
 model = TransformerModel(
     d_model=256,
@@ -45,13 +45,13 @@ model = TransformerModel(
     num_layers=4,
 ).to(device)
 
-batch_size = 8192
+batch_size = 4096
 epochs = 100
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(testset, batch_size=1000, shuffle=True)
 
-optimizer = t.optim.Adam(model.parameters(), lr=0.001)
+optimizer = t.optim.Adam(model.parameters())
 train_loss_list = []
 train_accuracy = []
 test_loss_list = []
@@ -69,39 +69,54 @@ def get_loss_and_acc(model, inputs, labels):
     
     return loss, acc
     
-	
+total_batch_ix = 0
 for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
     model.train()
     
-    for i, (inputs, labels) in enumerate(train_loader):
+    for batch_ix, (inputs, labels) in enumerate(train_loader):
         loss, acc = get_loss_and_acc(model, inputs, labels)
-        train_loss_list.append(loss.item())
-        train_accuracy.append(acc)
-        
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
+        
+        writer.add_scalars(
+            'batch',
+            {
+                'loss': loss.item(),
+                'accuracy': acc,
+            },
+            total_batch_ix,
+        )
+        total_batch_ix += 1
 
     model.eval()
-    test_inputs, test_labels = next(iter(test_loader))
-    test_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels)
-    test_loss_list.append(test_loss.item())
-    test_accuracy.append(test_acc)
+
+    epoch_loss_list = []
+    epoch_acc_list = []
+    for test_inputs, test_labels in iter(test_loader):
+        test_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels)
+        epoch_loss_list.append(test_loss.item())
+        epoch_acc_list.append(test_acc)
     
     writer.add_scalars(
         'loss', 
-        {'train': train_loss_list[-1], 
-         'test': test_loss_list[-1],}, 
+        {'train': loss.item(), 
+         'test': sum(epoch_loss_list)/len(epoch_loss_list)}, 
         epoch_ix,
     )
     writer.add_scalars(
         'accuracy', 
-        {'train': train_accuracy[-1], 
-         'test': test_accuracy[-1],}, 
+        {'train': acc, 
+         'test': sum(epoch_acc_list)/len(epoch_acc_list)}, 
         epoch_ix,
     )
     
 # %%
-t.save(model.state_dict(), "transformer_5c_100e_300f.pth")
+t.save(model.state_dict(), "transformer_5c_wt.pth")
 
+# %%
+model.eval()
+for test_inputs, test_labels in iter(test_loader):
+    test_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels)
+    print(test_acc)
 # %%
