@@ -64,9 +64,14 @@ def get_deal_data(player_cards_cnt: int, suit: str):
         ]
 
         correct_cards = list(solve_board(deal))
-        if len(correct_cards) == 1:
-            card, tricks = correct_cards[0]
-            out.append(str(card))
-            out.append(tricks)
+        cards = [x[0] for x in correct_cards]
+        tricks = [x[1] for x in correct_cards]
+        out.append(" ".join(str(card) for card in cards))
+        out.append(str(tricks[0]))
+        if tricks[0]:
             return out
+        
+# %%
+
+get_deal_data(5, 'nt')
 # %%
