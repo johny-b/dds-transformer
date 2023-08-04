@@ -25,10 +25,23 @@ class Dataset(TorchDataset):
         return data
         
     def __len__(self):
-        return len(self.data)
+        #   4 for each rotation
+        return len(self.data) * 4
     
     def __getitem__(self, ix):
-        return self.data[ix]
+        example_ix = ix % len(self.data)
+        rotation_ix = ix // len(self.data)
+        return self._rotate(self.data[example_ix], rotation_ix)
+    
+    def _rotate(self, in_out, rotation_ix):
+        in_, out = in_out
+        in_ = t.cat([self._rotate_hand(in_[i * 52: (i + 1) * 52], rotation_ix) for i in range(7)])
+        out = self._rotate_hand(out, rotation_ix)
+        return in_, out
+    
+    def _rotate_hand(self, hand, ix):
+        assert ix in (0, 1, 2, 3)
+        return t.cat([hand[13 * ix:], hand[:13 * ix]])
     
     def _get_pbn_data(self):
         data = []
@@ -80,4 +93,5 @@ class Dataset(TorchDataset):
             new_pbn = pbn[:2] + new_pbn
 
         return new_pbn
+
 # %%
