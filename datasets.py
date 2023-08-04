@@ -2,69 +2,75 @@
 import torch as t
 from torch.utils.data import Dataset as TorchDataset
 from tqdm import tqdm
+import ray
+import numpy as np
+import multiprocessing
 
 from utils import pbn_to_repr, trick_to_repr, correct_cards_to_repr
+
+@ray.remote
+def _get_full_file_data(num_cards, file_ix):
+    fname = f"data/boards_{num_cards}_card_wt_all/{file_ix}.csv"
+    with open(fname, 'r') as f:
+        rows = [row.strip() for row in f.readlines()]
+    
+    inputs, outputs = [], []
+    for row in rows:
+        pbn, current_trick, correct_cards = row.split(';')[2:5]
+        in_ = pbn_to_repr(pbn)
+        trick_data = trick_to_repr(current_trick)
+        out = correct_cards_to_repr(correct_cards)
+        in_ = t.cat([in_, trick_data])
+        inputs.append(in_)
+        outputs.append(out)
+    return inputs, outputs
 
 # %%
 class Dataset(TorchDataset):
     def __init__(self, card_files):
         self.card_files = card_files
-        print("Reading input files")
-        self.pbn_data = self._get_pbn_data()
-        print("Processing boards")
-        self.data = self._process_boards()
+        self.inputs, self.labels = self._get_data()
         
-    def _process_boards(self):
-        data = []
-        for pbn, current_trick, correct_cards, _ in tqdm(self.pbn_data):
-            in_ = pbn_to_repr(pbn)
-            trick_data = trick_to_repr(current_trick)
-            out = correct_cards_to_repr(correct_cards)
-            in_ = t.cat([in_, trick_data])
-            data.append((in_, out))
-        return data
+    def _get_data(self):
+        inputs, outputs = [], []
+        
+        num_cpus = multiprocessing.cpu_count() // 2
+        ray.init(num_cpus=num_cpus)
+        try:
+            for num_cards, file_ids in self.card_files.items():
+                print(f"Processing {num_cards}-card boards")
+                result_ids = [_get_full_file_data.remote(num_cards, file_id) for file_id in file_ids]
+                for _ in tqdm(file_ids):
+                    done_ids, result_ids = ray.wait(result_ids, num_returns=1)
+                    new_inputs, new_outputs = ray.get(done_ids[0])
+                    inputs += new_inputs
+                    outputs += new_outputs
+            return t.stack(inputs), t.stack(outputs)
+        finally:
+            ray.shutdown()
         
     def __len__(self):
         #   4 for each rotation
-        return len(self.data) * 4
+        return len(self.inputs) * 4
     
     def __getitem__(self, ix):
-        example_ix = ix % len(self.data)
-        rotation_ix = ix // len(self.data)
-        return self._rotate(self.data[example_ix], rotation_ix)
+        example_ix = ix % len(self.inputs)
+        rotation_ix = ix // len(self.inputs)
+        in_ = self.inputs[example_ix]
+        out = self.labels[example_ix]
+        return self._rotate(in_, out, rotation_ix)
     
-    def _rotate(self, in_out, rotation_ix):
-        in_, out = in_out
+    def _rotate(self, in_, out, rotation_ix):
         in_ = t.cat([self._rotate_hand(in_[i * 52: (i + 1) * 52], rotation_ix) for i in range(7)])
         out = self._rotate_hand(out, rotation_ix)
         return in_, out
     
     def _rotate_hand(self, hand, ix):
         assert ix in (0, 1, 2, 3)
-        return t.cat([hand[13 * ix:], hand[:13 * ix]])
-    
-    def _get_pbn_data(self):
-        data = []
-        for num_cards, file_ids in self.card_files.items():
-            for file_ix in file_ids:
-                fname = f"data/boards_{num_cards}_card_wt_all/{file_ix}.csv"
-                data += self._get_file_data(fname)
-        return data
-    
-    def _get_file_data(self, fname):
-        data = []
-        with open(fname, 'r') as f:
-            rows = [row.strip() for row in f.readlines()]
-            data += [self._parse_row(row) for row in rows]
-        return data
-    
-    def _parse_row(self, row):
-        parts = row.split(';')
-        pbn, current_trick, correct_cards, tricks = parts[2], parts[3], parts[4], parts[5]
-        
-        return pbn, current_trick, correct_cards, tricks
+        return t.cat([hand[13 * ix:], hand[:13 * ix]])    
     
     def _remove_card(self, pbn, card):
+        # NOT USED NOW
         def this_card(suit: int, val: str, card: str) -> bool:
             suits = "♠♥♦♣"
             this_card = suits[suit] + val
