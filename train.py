@@ -23,7 +23,7 @@ writer = SummaryWriter('runs')
 
 trainset = Dataset(
     {
-        5: list(range(20)),
+        5: list(range(297)),
     },
 )
 
@@ -43,7 +43,7 @@ model = TransformerModel(
 # %%
 
 use_amp = True
-optimizer = t.optim.Adam(model.parameters(), lr=0.0001)
+optimizer = t.optim.AdamW(model.parameters(), lr=0.0001, weight_decay=0.1)
 scaler = t.cuda.amp.GradScaler(enabled=use_amp)
 
 # %%
@@ -55,7 +55,7 @@ batch_size = 2048
 epochs = 100
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=3)
-test_loader = DataLoader(testset, batch_size=1000, shuffle=True)
+test_loader = DataLoader(testset, batch_size=1000, shuffle=True, num_workers=3)
 
 def get_loss_and_acc(model, inputs, labels):
     inputs = inputs.to(device)
@@ -91,6 +91,8 @@ for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
         )
         total_batch_ix += 1
 
+    del inputs
+    del labels
     model.eval()
 
     epoch_loss_list = []
