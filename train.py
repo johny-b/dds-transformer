@@ -18,6 +18,7 @@ from datasets import Dataset
 device = "cuda"
 writer = SummaryWriter('runs')
 
+
 # %%
 
 trainset = Dataset(
@@ -36,31 +37,35 @@ testset = Dataset(
 model = TransformerModel(
     d_model=256,
     nhead=8,
-    num_layers=12,
+    num_layers=4,
 ).to(device)
 
 # %%
 
+use_amp = True
 optimizer = t.optim.Adam(model.parameters(), lr=0.0001)
+scaler = t.cuda.amp.GradScaler(enabled=use_amp)
+
 # %%
 # for g in optimizer.param_groups:
 #     g['lr'] = 0.00005
 
 # model.load_state_dict(t.load("transformer_5c_wt_all_12_layers_798.pth"))
-batch_size = 32
+batch_size = 2048
 epochs = 100
 
-train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
+train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=3)
 test_loader = DataLoader(testset, batch_size=1000, shuffle=True)
 
 def get_loss_and_acc(model, inputs, labels):
     inputs = inputs.to(device)
     labels = labels[:, :52].to(device)
     
-    preds = model(inputs)
-        
-    loss = F.binary_cross_entropy(preds, labels)
-    round_preds = preds.round()
+    with t.autocast(device_type='cuda', dtype=t.float16, enabled=use_amp):    
+        preds = model(inputs)
+        loss = F.binary_cross_entropy_with_logits(preds, labels)
+
+    round_preds = F.sigmoid(preds).round()
     acc = (round_preds == labels).all(dim=1).mean(dtype=t.float32).item()
     
     return loss, acc
@@ -71,9 +76,10 @@ for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
     
     for batch_ix, (inputs, labels) in enumerate(train_loader):
         loss, acc = get_loss_and_acc(model, inputs, labels)
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
         optimizer.zero_grad()
+        scaler.update()
         
         writer.add_scalars(
             'batch',

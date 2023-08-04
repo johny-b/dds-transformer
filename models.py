@@ -41,7 +41,7 @@ class TransformerModel(nn.Module):
             num_layers=num_layers,
         )
         self.unembed = nn.Linear(7 * d_model, 52)
-        self.final_act = nn.Sigmoid()
+        # self.final_act = nn.Sigmoid()
     
     def forward(self, x: t.Tensor):
         assert len(x.shape) == 2
@@ -73,7 +73,7 @@ class TransformerModel(nn.Module):
         x = self.enc(x)
         x = x.flatten(start_dim=1)
         x = self.unembed(x)
-        x = self.final_act(x)
+        # x = self.final_act(x)
 
         return x
 # %%
