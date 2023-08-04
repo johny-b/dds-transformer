@@ -75,5 +75,5 @@ class TransformerModel(nn.Module):
         x = self.unembed(x)
         x = self.final_act(x)
 
-        return in_hand - x
+        return x
 # %%

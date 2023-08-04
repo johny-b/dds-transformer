@@ -28,7 +28,7 @@ trainset = Dataset(
 
 testset = Dataset(
     {
-        5: [299],
+        5: [297, 298, 299],
     },
 )
 
@@ -36,20 +36,22 @@ testset = Dataset(
 model = TransformerModel(
     d_model=256,
     nhead=8,
-    num_layers=4,
+    num_layers=12,
 ).to(device)
 
-batch_size = 1024
+# %%
+
+optimizer = t.optim.Adam(model.parameters(), lr=0.0001)
+# %%
+# for g in optimizer.param_groups:
+#     g['lr'] = 0.00005
+
+# model.load_state_dict(t.load("transformer_5c_wt_all_12_layers_798.pth"))
+batch_size = 32
 epochs = 100
 
 train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(testset, batch_size=1000, shuffle=True)
-
-optimizer = t.optim.Adam(model.parameters(), lr=0.0001)
-train_loss_list = []
-train_accuracy = []
-test_loss_list = []
-test_accuracy = []
 
 def get_loss_and_acc(model, inputs, labels):
     inputs = inputs.to(device)
@@ -57,7 +59,7 @@ def get_loss_and_acc(model, inputs, labels):
     
     preds = model(inputs)
         
-    loss = F.mse_loss(preds, labels)
+    loss = F.binary_cross_entropy(preds, labels)
     round_preds = preds.round()
     acc = (round_preds == labels).all(dim=1).mean(dtype=t.float32).item()
     
@@ -106,7 +108,13 @@ for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
     )
     
 # %%
-t.save(model.state_dict(), "transformer_2345c_wt.pth")
+del inputs
+del labels
+del test_inputs
+del test_labels
+    
+# %%
+t.save(model.state_dict(), "transformer_5c_wt_all_12_layers_798.pth")
 
 # %%
 model.eval()
