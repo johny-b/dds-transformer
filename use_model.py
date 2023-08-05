@@ -79,6 +79,7 @@ for ix in tqdm(range(120000)):
             print("CORRECT  ", hand_repr_to_pbn(label))
             print("PREDICTED", hand_repr_to_pbn(pred))
             print("BEST", CARDS[out.argmax()])
+            print(out.round(decimals=2))
         
             print()
 print("BAD CNT", not_solved_cnt)
