@@ -50,34 +50,47 @@ def play_random_card(deal: Deal):
     deal.play(random_card)
 
 def get_deal_data(player_cards_cnt: int, suit: str):
-    while True:
-        deal = generate_any_deal(player_cards_cnt)
-        deal.trump = Denom.find(suit)
+    #   Generate any random deal
+    deal = generate_any_deal(player_cards_cnt)
+    
+    #   Play cards in a trick
+    cards_played = choice([0,1,2,3])
+    players = "NWSE"
+    deal.first = Player.find(players[cards_played])
+    for i in range(cards_played):
+        play_random_card(deal)
 
-        cards_played = choice([0,1,2,3])
-        players = "NWSE"
-        deal.first = Player.find(players[cards_played])
-        for i in range(cards_played):
-            play_random_card(deal)
+    assert deal.curplayer == Player.find("N")
+    
+    
+    out = [
+        str(deal.curplayer.abbr),
+        str(deal),
+        " ".join(str(card) for card in deal.curtrick),
+    ]
 
-        assert deal.curplayer == Player.find("N")
+    #   Calculate results for all denoms
+    for trump in (Denom.nt, Denom.spades, Denom.hearts, Denom.diamonds, Denom.clubs):
+        deal.trump = trump
+        solved_board = solve_board(deal)
+        
+        def s(x: tuple[Card, int]):
+            return x.suit.numerator * 100000 - x.rank.numerator
+        
+        my_cards = sorted(deal[0], key=s)
+        cards_with_tricks = list(solved_board)
+        
+        tricks = []
+        for card in my_cards:
+            for other_card, tr in cards_with_tricks:
+                if other_card == card:
+                    break
+            else:
+                tr = -1
+            tricks.append(tr)
 
-        out = [
-            str(deal.first.abbr),
-            str(deal.trump.abbr),
-            str(deal),
-            " ".join(str(card) for card in deal.curtrick),
-        ]
+        out.append(" ".join([str(x) for x in tricks]))
 
-        correct_cards = list(solve_board(deal))
-        cards = [x[0] for x in correct_cards]
-        tricks = [x[1] for x in correct_cards]
-        out.append(" ".join(str(card) for card in cards))
-        out.append(str(tricks[0]))
-        if tricks[0]:
-            return out
+    return out
 
-# %%
-
-# print(get_deal_data(6, 'nt'))
 # %%
