@@ -42,8 +42,8 @@ class TransformerModel(nn.Module):
         )
         self.unembed = nn.Linear(7 * d_model, 52)
         # self.final_act = nn.Sigmoid()
-    
-    def forward(self, x: t.Tensor):
+        
+    def encode(self, x: t.Tensor):
         assert len(x.shape) == 2
         assert x.shape[1] == 364
         in_hand = x[:,:52]
@@ -71,10 +71,13 @@ class TransformerModel(nn.Module):
         
         x = t.cat([board, trick], dim=1)
         x = self.enc(x)
+        return x
+    
+    def forward(self, x: t.Tensor):
+        x = self.encode(x)
         x = x.flatten(start_dim=1)
         x = self.unembed(x)
         # x = self.final_act(x)
-
         return x
 
 # %%
@@ -139,37 +142,17 @@ class TransformerModelWithTricks(nn.Module):
 
         return out, tricks
 # %%
-'''
-class MyModel(nn.Model):
-    def __init__(self, fname):
-        self.base_model = TransformerModel()
-        self.base_model.load_state_dict(t.load(fname))
-        self.base_model.eval()
+
+class TrickModel(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.base_model = model
+        self.unembed_tricks = nn.Linear(7 * self.base_model.d_model, 1)
         
     def forward(self, x):
-        board = x[:,:208].reshape((x.shape[0], 4, 52))
-        trick = x[:,208:].reshape((x.shape[0], 3, 52))
-
-        board = t.stack((
-            self.embed(board[:,0,:]),
-            self.embed(board[:,1,:]),
-            self.embed(board[:,2,:]),
-            self.embed(board[:,3,:]),
-        )).permute((1,0,2))
-        
-        pos_embed = self.pos_embed.reshape((4, self.d_model)).unsqueeze(0)
-        board = board + pos_embed
-        
-        trick = t.stack((
-            self.trick_embed(trick[:,0,:]),
-            self.trick_embed(trick[:,1,:]),
-            self.trick_embed(trick[:,2,:]),
-        )).permute((1,0,2))
-        trick_pos_embed = self.trick_pos_embed.reshape((3, self.d_model)).unsqueeze(0)
-        trick = trick + trick_pos_embed
-        
-        x = t.cat([board, trick], dim=1)
-        x = self.enc(x)
+        x = self.base_model.encode(x)
         x = x.flatten(start_dim=1)
-'''   
+        x = self.unembed_tricks(x)
+        return x
+
 # %%

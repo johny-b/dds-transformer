@@ -12,7 +12,7 @@ import torch as t
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from models import TransformerModelWithTricks
+from models import TransformerModel, TrickModel
 from datasets import Dataset
 
 device = "cuda"
@@ -20,21 +20,22 @@ writer = SummaryWriter('runs')
 
 # %%
 import neptune
+
 run = neptune.init_run(
     project='aniasztyber/dds-transformer',
-    tags=['tricks'],
+    tags=['tricks', 'backbone'],
     source_files=["train ania.py", "models.py"])
 
 # %%
 params = {
-    'n_cards': 5,
+    'n_cards': 13,
     'd_model': 256,
     'nhead': 8,
-    'num_layers': 4,
+    'num_layers': 12,
     'lr': 0.0001,
     'weight_decay': 0.1,
     'batch_size': 1024,
-    'epochs': 1
+    'epochs': 10
 }
 
 run['params'] = params
@@ -43,7 +44,7 @@ run['params'] = params
 
 trainset = Dataset(
     {
-        params['n_cards']: list(range(2)),
+        params['n_cards']: list(range(100)),
     },
 )
 
@@ -54,11 +55,17 @@ testset = Dataset(
 )
 
 # %%
-model = TransformerModelWithTricks(
+base_model = TransformerModel(
     d_model=params['d_model'],
     nhead=params['nhead'],
     num_layers=params['num_layers'],
-).to(device)
+)
+base_model.load_state_dict(t.load("transformer_13c_12l_859.pth"))
+base_model.eval()
+base_model = base_model.to(device)
+
+model = TrickModel(base_model)
+model = model.to(device)
 
 # %%
 
@@ -83,23 +90,23 @@ def get_loss_and_acc(model, inputs, labels, tricks_labels):
     tricks_labels = tricks_labels.to(t.float32).unsqueeze(1).to(device)
     
     with t.autocast(device_type='cuda', dtype=t.float16, enabled=use_amp):    
-        preds, tricks_preds = model(inputs)
-        card_loss = F.binary_cross_entropy_with_logits(preds, labels)
+        # preds, tricks_preds = model(inputs)
+        tricks_preds = model(inputs)
+        # card_loss = F.binary_cross_entropy_with_logits(preds, labels)
         tricks_loss = F.mse_loss(tricks_preds, tricks_labels)
 
-    round_preds = F.sigmoid(preds).round()
-    acc = (round_preds == labels).all(dim=1).mean(dtype=t.float32).item()
+    round_preds = tricks_preds.round()
+    acc = (round_preds == tricks_labels).all(dim=1).mean(dtype=t.float32).item()
     
-    return card_loss, tricks_loss, acc
+    return tricks_loss, acc
     
 total_batch_ix = 0
 for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
     model.train()
     
     for batch_ix, (inputs, labels, tricks_labels) in enumerate(train_loader):
-        card_loss, tricks_loss, acc = get_loss_and_acc(model, inputs, labels, tricks_labels)
-        loss = card_loss + tricks_loss
-        scaler.scale(loss).backward()
+        tricks_loss, acc = get_loss_and_acc(model, inputs, labels, tricks_labels)
+        scaler.scale(tricks_loss).backward()
         scaler.step(optimizer)
         optimizer.zero_grad()
         scaler.update()
@@ -107,7 +114,7 @@ for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
         writer.add_scalars(
             'batch',
             {
-                'card_loss': card_loss.item(),
+                # 'card_loss': card_loss.item(),
                 'trick_loss': tricks_loss.item(),
                 'accuracy': acc,
             },
@@ -124,18 +131,19 @@ for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
     epoch_acc_list = []
     epoch_tricks_loss = []
     for test_inputs, test_labels, test_tricks_labels in iter(test_loader):
-        test_loss, test_tricks_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels, test_tricks_labels)
-        epoch_loss_list.append(test_loss.item())
+        test_tricks_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels, test_tricks_labels)
+        # epoch_loss_list.append(test_loss.item())
         epoch_acc_list.append(test_acc)
         epoch_tricks_loss.append(test_tricks_loss.item())
     
+    '''
     writer.add_scalars(
         'card_loss', 
         {'train': card_loss.item(), 
          'test': sum(epoch_loss_list)/len(epoch_loss_list)}, 
         epoch_ix,
     )
-    
+    '''
     writer.add_scalars(
         'trick_loss', 
         {'train': tricks_loss.item(), 
@@ -151,13 +159,11 @@ for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
     )
     
 # %%
-print(epoch_tricks_loss)    
-# %%
 del test_inputs
 del test_labels
     
 # %%
-file_name = "transformer_5c_wt_all_tricks.pth"
+file_name = "transformer_13c_bacbone_tricks.pth"
 t.save(model.state_dict(), file_name)
 run["model"].upload(file_name)
 # %%
@@ -165,7 +171,7 @@ model.eval()
 accs = []
 trick_losses = []
 for test_inputs, test_labels, test_tricks_labels in iter(test_loader):
-    test_loss, test_tricks_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels, test_tricks_labels)
+    test_tricks_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels, test_tricks_labels)
     accs.append(test_acc)
     trick_losses.append(test_tricks_loss.item())
     

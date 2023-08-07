@@ -5,7 +5,7 @@ import torch as t
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from models import TransformerModelWithTricks
+from models import TransformerModelWithTricks, TransformerModel
 from datasets import Dataset
 
 
@@ -33,6 +33,7 @@ testset = Dataset(
 batch_size = 1000
 test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=3)
 
+# %%
 accs = []
 for test_inputs, test_labels, test_tricks_labels in iter(test_loader):
     test_inputs = test_inputs.to(device)
@@ -43,4 +44,17 @@ for test_inputs, test_labels, test_tricks_labels in iter(test_loader):
 # %%
 print(sum(accs)/len(accs))
 
+# %%
+model = TransformerModel(
+    d_model=256,
+    nhead=8,
+    num_layers=12,
+)
+model.load_state_dict(t.load("transformer_13c_12l_859.pth", map_location=t.device('cpu')))
+model.eval()
+model = model.to(device)
+
+inputs, _, _ = next(iter(test_loader))
+output = model.encode(inputs)
+print(output.shape)
 # %%
