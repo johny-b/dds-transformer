@@ -14,22 +14,24 @@ def _get_full_file_data(num_cards, file_ix):
     with open(fname, 'r') as f:
         rows = [row.strip() for row in f.readlines()]
     
-    inputs, outputs = [], []
+    inputs, outputs, num_tricks = [], [], []
     for row in rows:
-        pbn, current_trick, correct_cards = row.split(';')[2:5]
+        pbn, current_trick, correct_cards, tricks = row.split(';')[2:6]
+        tricks = int(tricks)
         in_ = pbn_to_repr(pbn)
         trick_data = trick_to_repr(current_trick)
         out = correct_cards_to_repr(correct_cards)
         in_ = t.cat([in_, trick_data])
         inputs.append(in_)
         outputs.append(out)
-    return t.stack(inputs), t.stack(outputs)
+        num_tricks.append(tricks)
+    return t.stack(inputs), t.stack(outputs), t.Tensor(num_tricks)
 
 # %%
 class Dataset(TorchDataset):
     def __init__(self, card_files):
         self.card_files = card_files
-        self.inputs, self.labels = self._get_data()
+        self.inputs, self.labels, self.num_tricks = self._get_data()
         
     def _get_data(self):
         num_cpus = 7
@@ -45,7 +47,8 @@ class Dataset(TorchDataset):
             all_data = ray.get(all_done_ids)
             inputs = [x[0] for x in all_data]
             outputs = [x[1] for x in all_data]
-            return t.cat(inputs), t.cat(outputs)
+            num_tricks = [x[2] for x in all_data]
+            return t.cat(inputs), t.cat(outputs), t.cat(num_tricks)
         finally:
             ray.shutdown()
         
@@ -58,7 +61,8 @@ class Dataset(TorchDataset):
         rotation_ix = ix // len(self.inputs)
         in_ = self.inputs[example_ix]
         out = self.labels[example_ix]
-        return self._rotate(in_, out, rotation_ix)
+        tricks = self.num_tricks[example_ix]
+        return self._rotate(in_, out, rotation_ix) + (tricks,)
     
     def _rotate(self, in_, out, rotation_ix):
         in_ = t.cat([self._rotate_hand(in_[i * 52: (i + 1) * 52], rotation_ix) for i in range(7)])
