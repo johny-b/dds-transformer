@@ -23,7 +23,7 @@ def _get_full_file_data(num_cards, file_ix):
         in_ = t.cat([in_, trick_data])
         inputs.append(in_)
         outputs.append(out)
-    return inputs, outputs
+    return t.stack(inputs), t.stack(outputs)
 
 # %%
 class Dataset(TorchDataset):
@@ -32,20 +32,20 @@ class Dataset(TorchDataset):
         self.inputs, self.labels = self._get_data()
         
     def _get_data(self):
-        inputs, outputs = [], []
-        
-        num_cpus = multiprocessing.cpu_count() // 2
+        num_cpus = 7
         ray.init(num_cpus=num_cpus)
         try:
             for num_cards, file_ids in self.card_files.items():
                 print(f"Processing {num_cards}-card boards")
                 result_ids = [_get_full_file_data.remote(num_cards, file_id) for file_id in file_ids]
+                all_done_ids = []
                 for _ in tqdm(file_ids):
-                    done_ids, result_ids = ray.wait(result_ids, num_returns=1)
-                    new_inputs, new_outputs = ray.get(done_ids[0])
-                    inputs += new_inputs
-                    outputs += new_outputs
-            return t.stack(inputs), t.stack(outputs)
+                    new_done_ids, result_ids = ray.wait(result_ids, num_returns=1)
+                    all_done_ids += new_done_ids
+            all_data = ray.get(all_done_ids)
+            inputs = [x[0] for x in all_data]
+            outputs = [x[1] for x in all_data]
+            return t.cat(inputs), t.cat(outputs)
         finally:
             ray.shutdown()
         
