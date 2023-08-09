@@ -18,63 +18,71 @@ from datasets import Dataset
 device = "cuda"
 writer = SummaryWriter('runs')
 
-
 # %%
 
 trainset = Dataset(
     {
-        5: list(range(297)),
+        13: list(range(301)),
     },
+    card_tricks=True,
 )
 
 testset = Dataset(
     {
-        5: [297, 298, 299],
+        13: [301, 302, 303],
     },
+    card_tricks=True,
 )
 
 # %%
 model = TransformerModel(
     d_model=256,
     nhead=8,
-    num_layers=4,
+    num_layers=12,
 ).to(device)
 
 # %%
 
-use_amp = True
-optimizer = t.optim.AdamW(model.parameters(), lr=0.0001, weight_decay=0.1)
+use_amp = False
+optimizer = t.optim.AdamW(model.parameters(), lr=0.0001, weight_decay=0.001)
 scaler = t.cuda.amp.GradScaler(enabled=use_amp)
 
 # %%
 # for g in optimizer.param_groups:
-#     g['lr'] = 0.00005
+#     g['lr'] = 0.001
 
-# model.load_state_dict(t.load("transformer_5c_wt_all_12_layers_798.pth"))
-batch_size = 2048
+model.load_state_dict(t.load("transformer_full_12l_s_epoch_5.pth"))
+# optimizer.zero_grad()
+# scaler.update()
+# %%
+batch_size = 512
 epochs = 100
 
-train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=3)
-test_loader = DataLoader(testset, batch_size=1000, shuffle=True, num_workers=3)
+train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4)
+test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True, num_workers=2)
 
 def get_loss_and_acc(model, inputs, labels):
     inputs = inputs.to(device)
     labels = labels[:, :52].to(device)
+    mask = labels >= 0
     
     with t.autocast(device_type='cuda', dtype=t.float16, enabled=use_amp):    
         preds = model(inputs)
-        loss = F.binary_cross_entropy_with_logits(preds, labels)
+        preds = preds * mask
+        labels = labels * mask
+        loss = F.mse_loss(preds, labels)
 
-    round_preds = F.sigmoid(preds).round()
+    round_preds = preds.round()
+    print([int(x) for x in labels[0]])
+    print([int(x) for x in round_preds[0]])
+    print()
     acc = (round_preds == labels).all(dim=1).mean(dtype=t.float32).item()
     
     return loss, acc
     
 total_batch_ix = 0
 for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
-    model.train()
-    
-    for batch_ix, (inputs, labels) in enumerate(train_loader):
+    for batch_ix, (inputs, labels, num_tricks) in enumerate(train_loader):
         loss, acc = get_loss_and_acc(model, inputs, labels)
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -91,38 +99,47 @@ for epoch_ix, epoch in enumerate(tqdm(range(epochs))):
         )
         total_batch_ix += 1
 
-    del inputs
-    del labels
-    model.eval()
+        if not (total_batch_ix % 500):
+            del inputs
+            del labels
+            model.eval()
 
-    epoch_loss_list = []
-    epoch_acc_list = []
-    for test_inputs, test_labels in iter(test_loader):
-        test_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels)
-        epoch_loss_list.append(test_loss.item())
-        epoch_acc_list.append(test_acc)
-    
-    writer.add_scalars(
-        'loss', 
-        {'train': loss.item(), 
-         'test': sum(epoch_loss_list)/len(epoch_loss_list)}, 
-        epoch_ix,
-    )
-    writer.add_scalars(
-        'accuracy', 
-        {'train': acc, 
-         'test': sum(epoch_acc_list)/len(epoch_acc_list)}, 
-        epoch_ix,
-    )
+            epoch_loss_list = []
+            epoch_acc_list = []
+            for test_inputs, test_labels, num_tricks in iter(test_loader):
+                test_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels)
+                epoch_loss_list.append(test_loss.item())
+                epoch_acc_list.append(test_acc)
+            
+            test_loss = sum(epoch_loss_list)/len(epoch_loss_list)
+            test_acc = sum(epoch_acc_list)/len(epoch_acc_list)
+            writer.add_scalars(
+                'loss', 
+                {'train': loss.item(), 
+                'test': test_loss}, 
+                total_batch_ix,
+            )
+            writer.add_scalars(
+                'accuracy', 
+                {'train': acc, 
+                'test': test_acc}, 
+                total_batch_ix,
+            )
+            model.train()
+
+        if not total_batch_ix % 5000:
+            t.save(model.state_dict(), f"transformer_full_12l_nt_{test_loss}_{test_acc}.pth")
     
 # %%
+del loss
+del test_loss
 del inputs
 del labels
 del test_inputs
 del test_labels
     
 # %%
-t.save(model.state_dict(), "transformer_5c_wt_all_12_layers_798.pth")
+t.save(model.state_dict(), "model_13c_full_449.pth")
 
 # %%
 model.eval()
