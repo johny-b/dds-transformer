@@ -35,29 +35,33 @@ def _get_full_file_data_new(num_cards, file_ix):
     
     inputs, labels, num_tricks = [], [], []
     for row in rows:
-        pbn, current_trick, tricks_nt = row.split(';')[1:4]
+        pbn, current_trick, *all_tricks = row.split(';')[1:]
         in_ = pbn_to_repr(pbn)
         trick_data = trick_to_repr(current_trick)
         in_ = t.cat([in_, trick_data])
         inputs.append(in_)
         
-        tricks_nt = [int(x) for x in tricks_nt.split(' ')]
-        
-        #   0/1 - do we have this card
-        label = in_[:52].clone()
-        card_ixs = label.nonzero().flatten()
-        
-        #   set nonexistent cards to -2
-        label[label == 0] = -2
-        
-        #   set other values
-        for card_ix, tricks in zip(card_ixs, tricks_nt):
-            label[card_ix] = tricks
-        
-        labels.append(label)
-        num_tricks.append(label.max().item())
-    return t.stack(inputs), t.stack(labels), t.Tensor(num_tricks)
+        label_parts = []
+        for tricks in all_tricks:
+            tricks = [int(x) for x in tricks.split(' ')]
+            
+            #   0/1 - do we have this card
+            label = in_[:52].clone()
+            card_ixs = label.nonzero().flatten()
+            
+            #   set nonexistent cards to -2
+            label[label == 0] = -2
+            
+            #   set other values
+            for card_ix, tr in zip(card_ixs, tricks):
+                label[card_ix] = tr
+            label_parts.append(label)
 
+        full_label = t.cat(label_parts)
+        labels.append(full_label)
+        num_tricks.append(full_label.max().item())
+
+    return t.stack(inputs), t.stack(labels), t.Tensor(num_tricks)
 # %%
 class Dataset(TorchDataset):
     def __init__(self, card_files, card_tricks=False):
@@ -66,7 +70,7 @@ class Dataset(TorchDataset):
         self.inputs, self.labels, self.num_tricks = self._get_data()
         
     def _get_data(self):
-        num_cpus = 7
+        num_cpus = 24
         ray.init(num_cpus=num_cpus)
         func = _get_full_file_data_new if self.card_tricks else _get_full_file_data_old
         try:
@@ -92,6 +96,7 @@ class Dataset(TorchDataset):
     def __getitem__(self, ix):
         example_ix = ix % len(self.inputs)
         rotation_ix = ix // len(self.inputs)
+        assert rotation_ix in (0, 1, 2, 3)
         in_ = self.inputs[example_ix]
         out = self.labels[example_ix]
         tricks = self.num_tricks[example_ix]
@@ -99,11 +104,12 @@ class Dataset(TorchDataset):
     
     def _rotate(self, in_, out, rotation_ix):
         in_ = t.cat([self._rotate_hand(in_[i * 52: (i + 1) * 52], rotation_ix) for i in range(7)])
-        out = self._rotate_hand(out, rotation_ix)
+        out = t.cat([self._rotate_hand(out[i * 52: (i + 1) * 52], rotation_ix) for i in range(5)])
+        out = t.cat([out[:52], out[52 * (rotation_ix + 1):], out[:52 * (rotation_ix + 1)]])
         return in_, out
     
     def _rotate_hand(self, hand, ix):
-        assert ix in (0, 1, 2, 3)
+        
         return t.cat([hand[13 * ix:], hand[:13 * ix]])    
     
     def _remove_card(self, pbn, card):
@@ -137,4 +143,11 @@ class Dataset(TorchDataset):
 
         return new_pbn
 
-# %%
+# # %%
+# x = Dataset({13: [0]}, card_tricks=True)
+
+
+# # %%
+# print([int(a) for a in x[4][1][52:104]])
+# print([int(a) for a in x[10004][1][52 * 5:]])
+# # %%

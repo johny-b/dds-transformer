@@ -40,7 +40,7 @@ class TransformerModel(nn.Module):
             nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True),
             num_layers=num_layers,
         )
-        self.unembed = nn.Linear(7 * d_model, 52)
+        self.unembed = nn.Linear(7 * d_model, 5 * 52)
         # self.final_act = nn.Sigmoid()
         
     def encode(self, x: t.Tensor):
