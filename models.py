@@ -21,12 +21,13 @@ class SimpleModel(nn.Module):
         
 # %%
 class TransformerModel(nn.Module):
-    def __init__(self, *, d_model, nhead, num_layers):
+    def __init__(self, *, d_model, nhead, num_layers, end_model = None):
         super().__init__()
         
         self.d_model = d_model
         self.nhead = nhead
         self.num_layers = num_layers
+        self.end_model = end_model
         
         self.embed = nn.Linear(52, d_model)
         self.pos_embed = nn.Parameter(t.empty(4 * d_model))
@@ -40,13 +41,19 @@ class TransformerModel(nn.Module):
             nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True),
             num_layers=num_layers,
         )
+        
         self.unembed = nn.Linear(7 * d_model, 5 * 52)
-        # self.final_act = nn.Sigmoid()
         
     def encode(self, x: t.Tensor):
+        x = self.emb(x)
+        x = self.enc(x)
+        if self.end_model is not None:
+            x = self.end_model.enc(x)
+        return x
+    
+    def emb(self, x):
         assert len(x.shape) == 2
         assert x.shape[1] == 364
-        in_hand = x[:,:52]
         
         board = x[:,:208].reshape((x.shape[0], 4, 52))
         trick = x[:,208:].reshape((x.shape[0], 3, 52))
@@ -70,14 +77,15 @@ class TransformerModel(nn.Module):
         trick = trick + trick_pos_embed
         
         x = t.cat([board, trick], dim=1)
-        x = self.enc(x)
         return x
     
     def forward(self, x: t.Tensor):
         x = self.encode(x)
         x = x.flatten(start_dim=1)
-        x = self.unembed(x)
-        # x = self.final_act(x)
+        if self.end_model is None:
+            x = self.unembed(x)
+        else:
+            x = self.end_model.unembed(x)
         return x
 
 # %%
