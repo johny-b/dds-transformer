@@ -23,10 +23,10 @@ writer = SummaryWriter('runs')
 use_amp = True
 batch_size = 1024 * 2
 num_suits = 1
-epochs = 100
 
 # %%
 def get_data(card_cnt, dataset_size):
+    assert dataset_size <= 400
     trainset = Dataset(
         {
             card_cnt: list(range(dataset_size)),
@@ -65,7 +65,7 @@ def get_loss_and_acc(model, inputs, labels):
 def train(model, trainset, test_data, total_batch_ix, max_batches):
     start_batch_ix = total_batch_ix
     
-    optimizer = t.optim.AdamW(model.parameters(), lr=0.0001, weight_decay=0.001)
+    optimizer = t.optim.AdamW(model.parameters(), lr=0.0002, weight_decay=0)
     scaler = t.cuda.amp.GradScaler(enabled=use_amp)
     
     train_loader = DataLoader(
@@ -81,6 +81,9 @@ def train(model, trainset, test_data, total_batch_ix, max_batches):
     while True:
         for inputs, labels, _ in tqdm(train_loader):
             model.train()
+            if model.end_model is not None:
+                #   TODO: do we need this?
+                model.end_model.eval()
 
             loss, acc = get_loss_and_acc(model, inputs, labels)
             scaler.scale(loss).backward()
@@ -98,8 +101,16 @@ def train(model, trainset, test_data, total_batch_ix, max_batches):
                 },
                 total_batch_ix,
             )
+            
+            if not total_batch_ix % 2500:
+                for g in optimizer.param_groups:
+                    g['lr'] = g['lr'] * 0.8
+            
+            if not total_batch_ix % 5000:      
+                if model.end_model is not None:
+                    model.end_model.unembed.requires_grad_(True)
 
-            if not (total_batch_ix % 5000):
+            if not (total_batch_ix % 2500):
                 del inputs
                 del labels
                 model.eval()
@@ -107,11 +118,10 @@ def train(model, trainset, test_data, total_batch_ix, max_batches):
                 loss_list = []
                 acc_list = []
 
-                for test_inputs, test_labels, num_tricks in test_data:
+                for test_inputs, test_labels, _ in test_data:
                     test_loss, test_acc = get_loss_and_acc(model, test_inputs, test_labels)
                     loss_list.append(test_loss.item())
-                    acc_list.append(test_acc)
-                    
+                    acc_list.append(test_acc)   
 
                 test_loss = sum(loss_list)/len(loss_list)
                 test_acc = sum(acc_list)/len(acc_list)
@@ -127,31 +137,45 @@ def train(model, trainset, test_data, total_batch_ix, max_batches):
                     total_batch_ix,
                 )
                 
-                if total_batch_ix - start_batch_ix >= max_batches:
+                if test_acc > 0.995 or (total_batch_ix - start_batch_ix >= max_batches):
                     return test_acc, test_loss, total_batch_ix
                 
 
 # %%
-prev_model = None
+prev_model = TransformerModel(
+    d_model=512,
+    nhead=32,
+    num_layers=3,
+    end_model=None,
+).to(device)
+prev_model.load_state_dict(t.load("m_2_0.9994237362328222_0.00012536337083675188.pth"))
+prev_model.eval()
+prev_model.requires_grad_(False)
+
+# prev_model = None
+
 num_batches = 0
-for card_cnt in range(2, 14):
-    trainset, test_data = get_data(card_cnt, 100)
+for card_cnt in range(3, 14):
+    trainset, test_data = get_data(card_cnt, 400)
+    
     model = TransformerModel(
         d_model=512,
         nhead=32,
         num_layers=3,
         end_model=prev_model,
     ).to(device)
+    
     accuracy, loss, num_batches = train(
         model, 
         trainset, 
         test_data, 
         num_batches, 
-        max_batches=10000,
+        max_batches=25000,
     )
     
     t.save(model.state_dict(), f"m_{card_cnt}_{accuracy}_{loss}.pth")
     
     prev_model = model
+    prev_model.eval()
     prev_model.requires_grad_(False)
 # %%

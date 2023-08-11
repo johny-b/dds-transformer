@@ -41,8 +41,10 @@ class TransformerModel(nn.Module):
             nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, batch_first=True),
             num_layers=num_layers,
         )
-        
-        self.unembed = nn.Linear(7 * d_model, 5 * 52)
+        if end_model is None:
+            self.unembed = nn.Linear(7 * d_model, 5 * 52)
+        else:
+            self.unembed = end_model.unembed
         
     def encode(self, x: t.Tensor):
         x = self.emb(x)
@@ -82,10 +84,7 @@ class TransformerModel(nn.Module):
     def forward(self, x: t.Tensor):
         x = self.encode(x)
         x = x.flatten(start_dim=1)
-        if self.end_model is None:
-            x = self.unembed(x)
-        else:
-            x = self.end_model.unembed(x)
+        x = self.unembed(x)  # NOTE: if we have end_model, we share unembed
         return x
 
 # %%
